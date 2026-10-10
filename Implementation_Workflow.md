@@ -1,21 +1,21 @@
-##Complete implementation workflow: Clinical Note Summarization Without Hallucination
+### Complete implementation workflow: Clinical Note Summarization Without Hallucination
 Your project should be implemented as a clinical text summarization system that uses ClinicalT5 to generate summaries and a verification pipeline to detect and reduce unsupported clinical claims.
 The important part is that you are not merely building a model that summarizes text. You are evaluating whether the generated summary remains faithful to the original clinical note, particularly for diagnoses, medications, negation, and uncertainty.
 I'll break the implementation into phases, explain what you need to build in each phase, and show how all the components fit together.
 1. What exactly are we building?
-#PROJECT INPUT
+# PROJECT INPUT
 A de-identified clinical note from MIMIC-IV's clinical-note resource.
 
-#CORE SYSTEM
+# CORE SYSTEM
 Clinical note preprocessing
 Clean, select, and prepare the note
 
 
-#ClinicalT5 summarization
+# ClinicalT5 summarization
 Generate a draft summary
 
 
-Factuality verification
+# Factuality verification
 Check claims against the source note
 
 
@@ -38,7 +38,7 @@ This is the most important implementation decision. There is a ready-made datase
 
 
 
-Dataset: MIMIC-IV-Ext-BHC
+# Dataset: MIMIC-IV-Ext-BHC
 Recommended
 It contains approximately 270,000 clinical-note and brief-hospital-course summary pairs derived from MIMIC-IV-Note. The source note is the input; the brief hospital course is the reference summary. 
 
@@ -60,7 +60,7 @@ Dataset and access instructions
 
 
 
-Model: ClinicalT5
+# Model: ClinicalT5
 ClinicalT5 is the clinical-domain encoder-decoder model you will use for text generation. The released models were pretrained on clinical notes from both MIMIC-III and MIMIC-IV; the official model weights require credentialed access. 
 
 PhysioNet
@@ -68,7 +68,7 @@ PhysioNet
 
 
 
-ClinicalT5 model resource
+# ClinicalT5 model resource
 
 
 
