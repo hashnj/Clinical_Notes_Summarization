@@ -1,8 +1,8 @@
-# Clinical Note Summarization
+# Clinical Report OCR and Evidence-Grounded Summarization
 
-Research prototype for generating concise summaries from de-identified clinical notes and evaluating whether source-evidence checks reduce unsupported claims without losing important information.
+Research prototype for extracting text from medical report images, generating concise summaries, and evaluating whether source-evidence checks reduce unsupported claims without losing important information.
 
-**Status:** Repository setup and research decisions are in progress. This is not a clinical tool.
+**Status:** Local image upload, OCR, and editable text review are implemented as an early prototype. Summarization, structured extraction, and evidence verification are not implemented yet. This is not a clinical tool.
 
 ## Start Here
 
@@ -13,7 +13,10 @@ Research prototype for generating concise summaries from de-identified clinical 
 
 ## Current Scope and Open Decisions
 
-- The intended task is text-only summarization of de-identified MIMIC-IV clinical notes. OCR, computer vision, and MIMIC-III data are outside the current data scope.
+- The planned primary input is a scanned or photographed medical report. OCR and document-layout extraction are in scope; interpreting diagnostic imagery such as X-rays, CT, or MRI is not.
+- A direct-text path supports machine-readable notes and text-only baselines. MIMIC-IV-Note is a text resource, not a source of report images; it is an optional, separately governed dataset for text experiments.
+- The OCR prototype uses RapidOCR with its CPU ONNX Runtime backend. It is not yet evaluated on real report images; only a synthetic smoke sample has been checked. English/Chinese are the default model languages; check model support before using other languages.
+- The image source and summary targets are still undecided. Do not use the unverified Kaggle download. Do not claim end-to-end summarization or clinical accuracy.
 - The exact dataset and note-summary pairing are not yet selected. MIMIC-IV-Note provides notes; do not assume it alone provides the reference summaries needed for supervised training or reference-based evaluation. Verify the candidate benchmark's schema, pairing, access terms, and split identifiers first.
 - ClinicalT5 is a candidate baseline, not yet a dependency. Confirm checkpoint access, tokenizer compatibility, context limits, and pretraining provenance. In particular, distinguish excluding MIMIC-III from the project's downstream data from requiring a model that was never pretrained on MIMIC-III.
 - The research question is whether evidence-based verification reduces unsupported or contradictory claims while preserving clinically important content.
@@ -26,23 +29,46 @@ data/                             Local-only data; see data/README.md
 notebooks/                        Exploratory analysis, without committed notes
 scripts/                          Reproducible command-line entry points
 src/clinical_note_summarization/
-   data/                           Dataset validation and preprocessing
+   data/                           Source validation and text preprocessing
+   ocr/                            Image ingestion, preprocessing, OCR, and layout
+   extraction/                     Source-linked clinical fact extraction
    generation/                     Model loading and summary generation
    verification/                   Claim/evidence checks and policy
    evaluation/                     Metrics and review exports
 tests/                            Unit tests using synthetic examples
 ```
 
+## Planned Processing Flow
+
+```mermaid
+flowchart LR
+   A[Select report images or direct text] --> B[Validate input and retain source ID]
+   B --> C{Input type}
+   C -->|Image/PDF| D[Preprocess pages and run OCR]
+   D --> E[Review OCR text and uncertain regions]
+   C -->|Machine-readable text| F[Validate and normalize text]
+   E --> G[Extract requested facts with source references]
+   F --> G
+   G --> H[Generate draft summary]
+   H --> I[Verify facts and claims against source text]
+   I --> J[Review outputs with OCR/evidence provenance]
+```
+
+OCR confidence is not clinical confidence. OCR text should be reviewed when uncertain, especially for numbers, units, dates, medications, negation, and table reading order. The verifier checks the draft against extracted source text; it cannot compensate for information OCR failed to capture.
+
 ## Local Setup
 
-The repository starts with no model or dataset dependencies. In PowerShell, from the repository root:
+The base install has no model or dataset dependencies. To run the local OCR review app, install its optional dependencies. In PowerShell, from the repository root:
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+\.venv\Scripts\python.exe -m pip install -e ".[app,dev]"
 .\.venv\Scripts\python.exe -m pytest
+\.venv\Scripts\python.exe -m streamlit run scripts/ocr_app.py
 ```
+
+The app accepts one PNG, JPEG, or WebP page at a time, runs OCR locally, and lets you review/edit recognized text. It does not save the uploaded image or reviewed text. On first use, RapidOCR may download its model files into the Python environment. The review output is not yet connected to a summarizer.
 
 To inspect authorized CSV data and use notebooks, install the data-analysis tools. Add `pyarrow` only if the selected files are Parquet:
 
@@ -66,7 +92,11 @@ For an initial TF-IDF evidence retriever and ROUGE evaluation:
 .\.venv\Scripts\python.exe -m pip install scikit-learn rouge-score
 ```
 
-`bert-score` and `streamlit` are optional follow-on dependencies, not required for the initial repository setup. These commands install packages into the local environment; once the chosen pipeline is settled, record its dependency groups and version constraints in `pyproject.toml`.
+`bert-score` remains an optional follow-on dependency. Install packages into the local environment; model/training dependencies will be selected separately after dataset access and hardware decisions.
+
+### OCR Dependencies
+
+The `app` extra installs RapidOCR, ONNX Runtime, Pillow, NumPy, and Streamlit. RapidOCR is the initial local OCR choice, not a completed comparative evaluation. It currently runs with the CPU backend; assess layout, language, and table handling against authorized sample reports before relying on its output. Do not send report images to a hosted OCR service unless source terms and user consent allow it.
 
 ### Restricted Data Access
 
@@ -74,7 +104,7 @@ MIMIC-IV access is restricted to credentialed users who have completed the requi
 
 A Kaggle upload is not, by itself, permission to use restricted MIMIC-IV data. Do not use or redistribute a third-party mirror unless its provenance and authorization explicitly permit that use. PhysioNet also treats MIMIC-derived datasets and models as sensitive; follow its [sharing guidance](https://physionet.org/content/mimiciv/3.1/) and applicable agreements. If access is unavailable, use a dataset that is explicitly authorized for your use and update the project scope accordingly.
 
-Do not put MIMIC data, model weights, credentials, or note-level outputs in Git. Read [data handling notes](data/README.md) before placing any authorized files locally. MIMIC-IV-Note provides clinical notes; verify that the selected task dataset also provides the paired reference summaries needed for supervised training or reference-based evaluation.
+Do not put report images, OCR transcripts, MIMIC data, model weights, credentials, or note-level outputs in Git. Read [data handling notes](data/README.md) before placing any authorized files locally. MIMIC-IV-Note provides clinical note text, not report images; verify that any selected task dataset provides the paired references needed for supervised training or reference-based evaluation. Use a separately authorized image/transcription source to evaluate OCR.
 
 ## Project Background
 
@@ -84,7 +114,7 @@ Do not put MIMIC data, model weights, credentials, or note-level outputs in Git.
 >
 > **Source files:** `Clinical_Note_Summarization_Revised.pptx` (revised proposal) and `Clinical Note Summarization.pdf` (original presentation).
 >
-> **Important interpretation:** Where the two files differ, this document records the difference explicitly. The revised PPT defines the tighter project scope: **text-only MIMIC-IV-Note + ClinicalT5 + evidence-based factuality verification**. The original PDF contains an earlier, broader workflow with OCR/computer-vision processing and mentions both MIMIC-III and MIMIC-IV.
+> **Important interpretation:** These presentations document earlier proposal stages, not the current workspace scope. The revised PPT narrows the original idea to text-only MIMIC-IV-Note + ClinicalT5 + evidence verification. The current workspace direction restores document-image OCR as the planned input path, while retaining a separate direct-text path; neither presentation establishes an image dataset or a working implementation.
 
 ---
 
@@ -97,9 +127,9 @@ Do not put MIMIC data, model weights, credentials, or note-level outputs in Git.
 
 ### Core idea
 
-Clinical notes are long, semi-structured narratives that may contain patient history, symptoms, diagnoses, medications, procedures, laboratory findings, and treatment plans. Summarization can reduce the burden of reviewing these notes, but a fluent summary is not necessarily a factually faithful one.
+Medical reports may arrive as scanned pages or photographs, while machine-readable clinical notes remain a useful direct-text input. OCR can make document text available to a summarizer, but recognition errors may change clinically important details. A fluent summary is not necessarily a factually faithful one, so the pipeline must preserve traceability from output claims to reviewed source text and, where possible, image page/region.
 
-The project aims to generate concise summaries from clinical text and then verify that each generated clinical claim is supported by the original note. Particular attention is given to **negation, uncertainty, contradictions, missing important facts, medication details, diagnoses, and temporality**.
+The project aims to extract and review text from report images, optionally return source-linked structured facts, generate concise summaries, and verify outputs against the extracted source. Particular attention is given to OCR errors and **negation, uncertainty, contradictions, missing important facts, medication details, numbers, units, and dates**. Extracted information must reflect the report, not add a diagnosis or treatment recommendation.
 
 ### Main principle
 
@@ -134,26 +164,28 @@ Clinical summarization models can produce concise, readable output, yet generate
 
 ### Objectives
 
-1. **Build a summarization pipeline:** Generate concise summaries from de-identified MIMIC-IV clinical notes using ClinicalT5.
-2. **Improve evidence-grounded factuality:** Check generated claims against source evidence, with attention to negation and uncertainty.
-3. **Evaluate quality and clinical reliability:** Measure relevance, coverage, and factual consistency using complementary automatic metrics and targeted human review.
-4. **Analyse trade-offs and failure modes:** Compare baseline generation with the verification approach and identify remaining error patterns.
+1. **Build a document-text pipeline:** Ingest authorized report images, extract text with a selected OCR engine, and retain page/region provenance where available; support direct text separately.
+2. **Generate concise summaries:** Use a selected summarizer (ClinicalT5 remains a candidate for compatible text inputs) without presenting OCR or NLP as diagnosis.
+3. **Improve evidence-grounded factuality:** Check generated claims against reviewed source text, with attention to OCR uncertainty, negation, and clinical details.
+4. **Evaluate the stages separately and together:** Measure OCR fidelity, summary coverage, and factual consistency using complementary metrics and targeted human review.
 
-### Revised scope (the current project definition)
+### Current workspace scope (updated from the presentation proposals)
 
 **In scope**
-- MIMIC-IV clinical text accessed through the companion MIMIC-IV-Note resource.
-- ClinicalT5-based summary generation.
-- Claim-level evidence support checks.
-- Negation and uncertainty preservation.
-- Automatic evaluation plus targeted manual review.
+- User-selected medical report images or multi-page document files, subject to an authorized source and defined supported formats.
+- OCR and document-layout extraction, with confidence/provenance and a review step for uncertain text.
+- A direct-text input route for machine-readable clinical notes and baselines.
+- Summary generation and claim-level evidence checks against the reviewed extracted text.
+- Optional report-specific structured fact extraction with page/region or text-span references; absent or ambiguous values must not be guessed.
+- OCR-specific and summary-specific evaluation, including negation, uncertainty, numbers, units, and important omissions.
 
 **Out of scope**
-- OCR and scanned-document processing.
-- Computer vision or image understanding.
-- Mixing MIMIC-III with MIMIC-IV in the same project.
+- Diagnosing from X-rays, CT, MRI, pathology slides, or other diagnostic imagery.
+- Clinical decision-making, autonomous treatment recommendations, or claims of clinical safety.
+- Uploading sensitive reports to third-party services without explicit authorization.
+- Mixing MIMIC-III with MIMIC-IV in a project dataset.
 
-The revised proposal explicitly frames this as a **text-to-text NLP task**, not an OCR/CV project. The OCR and CV steps in the original PDF are part of the earlier proposed workflow and should not be treated as part of the revised scope unless the project scope is deliberately changed.
+The image path is document OCR, not medical-image diagnosis. The repository currently contains only a scaffold: no image uploader, OCR engine, summarizer, or end-to-end pipeline has been implemented.
 
 ---
 
@@ -162,7 +194,7 @@ The revised proposal explicitly frames this as a **text-to-text NLP task**, not 
 ### Dataset choice
 
 - **Source:** De-identified electronic health records from Beth Israel Deaconess Medical Center.
-- **Text resource:** MIMIC-IV-Note, the companion resource providing free-text clinical notes.
+- **Text resource:** MIMIC-IV-Note, the companion resource providing free-text clinical notes; it is not an image OCR corpus.
 - **Likely note focus:** Discharge summaries and their associated admission context.
 - **Why it fits:** Clinical language includes diagnoses, treatment details, temporal information, and negation.
 
@@ -171,7 +203,8 @@ The revised proposal explicitly frames this as a **text-to-text NLP task**, not 
 - Complete the applicable PhysioNet credentialing and data-use training.
 - Use de-identified text and do not attempt re-identification.
 - Document note selection, exclusions, train/validation/test split, and preprocessing.
-- Do not claim OCR is required for the selected note text: it is already machine-readable.
+- Use MIMIC-IV-Note only for a direct-text path or text baseline. Do not use it to claim image-OCR evaluation or training.
+- Choose a distinct, authorized image/transcription source before developing OCR metrics or tuning.
 - Verify access conditions and the exact schema for the selected MIMIC-IV-Note version before data preparation.
 
 ### Illustrative schema from the revised PPT
@@ -187,10 +220,12 @@ The values below are examples from the slide, **not real patient records**. Exac
 | `charttime` | `2150-04-12 10:30` | Note timestamp |
 | `text` | “Patient admitted with…” | Source clinical narrative |
 
-### Training example
+### Example source paths
 
-- **Input:** Selected clinical note text.
-- **Target:** Reference brief hospital-course summary, where paired labels are available.
+- **Image path:** Report page image -> OCR text plus page/region provenance -> reviewed source text -> summary.
+- **Direct-text path:** Machine-readable clinical note -> validated source text -> summary.
+- **OCR target:** Trusted transcription paired with the report image, where such labels are available.
+- **Summary target:** Reference summary paired with the source text, where valid targets are available.
 
 ### Data-splitting warning
 
@@ -207,24 +242,23 @@ For the current proposal, follow the revised PPT.
 
 ## 4. End-to-end workflow: the revised methodology
 
-The revised flowchart shows a text-only pipeline with five main stages, followed by a support decision and correction loop.
+The updated workspace flow begins with image or direct-text input, then joins at summary generation. OCR evaluation is a separate gate before clinical summarization.
 
 ```mermaid
 flowchart TD
-    A["1. Select notes<br/>MIMIC-IV-Note<br/>Discharge summaries"]
-    B["2. Prepare data<br/>Clean text and select sections<br/>Tokenize and split"]
-    C["3. Generate summary<br/>ClinicalT5 baseline<br/>Note → draft summary"]
-    D["4. Extract claims<br/>Split draft into claims<br/>Identify key clinical facts"]
-    E["5. Verify evidence<br/>Match claims to source spans<br/>Check support / contradiction"]
-    F{"Is the claim supported?"}
-    G["Supported: keep claim"]
-    H["Unsupported: revise or remove"]
-    I["Re-verify revised claims<br/>against the original note"]
-    J["Final summary<br/>Concise • evidence-linked<br/>Negation-aware • uncertainty-preserving"]
-
-    A --> B --> C --> D --> E --> F
-    F -- Yes --> G --> J
-    F -- No --> H --> I --> E
+   A["Select report image or source text"] --> B{"Input type"}
+   B -->|Image/PDF| C["Validate pages and run OCR/layout extraction"]
+   C --> D["Review OCR text and uncertain regions"]
+   B -->|Direct text| E["Validate source text"]
+   D --> F["Extract requested facts with source references"]
+   E --> F
+   F --> G["Generate summary from reviewed source text"]
+   G --> H["Extract atomic summary claims"]
+   H --> I["Link facts and claims to source text/page/region"]
+   I --> J{"Supported and key facts covered?"}
+   J -->|Yes| K["Evidence-linked facts and summary"]
+   J -->|No| L["Flag for human review or conservative correction"]
+   L --> I
 ```
 
 ### Stage-by-stage meaning
@@ -271,7 +305,7 @@ flowchart TD
 
 ## 5. Expanded verification logic from the original PDF
 
-The original PDF makes the verification stage more explicit by naming four checks. These checks can be incorporated into the revised claim-verification stage without reintroducing the excluded OCR/CV pipeline.
+The original PDF makes the verification stage more explicit by naming four checks. These checks can be incorporated after OCR, against reviewed extracted text and source locations.
 
 ### Statement-level verification checks
 
@@ -314,7 +348,7 @@ The original PDF's novelty slide also proposes a table-like representation of ex
 |---|---|---|
 | Diabetes | “Patient has a history of diabetes.” | Page 2, Line 5 (illustrative slide example) |
 
-This illustrates the intended evidence trace: a fact should be linked to the sentence and location from which it was extracted. For machine-readable MIMIC-IV-Note text, the exact location representation will depend on how note offsets or section boundaries are stored.
+This illustrates the intended evidence trace: a fact should link to the sentence and source location. For OCR input, retain page and bounding-box references where the engine provides them; for machine-readable notes, use note offsets or section boundaries.
 
 ---
 
@@ -341,9 +375,9 @@ flowchart LR
 - **Faithfulness verification:** Check generated content against the source.
 - **Evaluation metrics:** Assess the output.
 
-### Scope decision
+### How this historical pipeline relates to the current direction
 
-The revised PPT removes the CV/OCR stage and selects MIMIC-IV-Note text only. Therefore, the current project pipeline should start with machine-readable notes, not scanned documents or images. Keeping the original pipeline in these notes is useful for understanding the project's evolution, but it should not be confused with the final proposed scope.
+The revised PPT removes the CV/OCR stage and selects MIMIC-IV-Note text only. The current workspace direction deliberately restores document-image OCR as a planned front end. The original flow is useful project history, but neither presentation specifies the authorized image source, OCR engine, or implementation details.
 
 ---
 
@@ -437,6 +471,7 @@ The revised PPT explicitly argues that evaluation must measure more than word ov
 
 | Evaluation dimension | Metric/check listed | What it tells us | Limitation to keep in mind |
 |---|---|---|---|
+| OCR fidelity | Character/word error rate against trusted transcription; targeted review | Text recognition quality, including consequential field errors | Requires authorized paired images/transcripts; a low average error rate can hide a critical number or negation error |
 | Content overlap | ROUGE-1, ROUGE-2, ROUGE-L | Lexical overlap with reference summaries | Does not guarantee factuality |
 | Semantic alignment | BERTScore (optional) | Semantic similarity between generated and reference text | Can miss clinically important contradictions |
 | Factual consistency | AlignScore or FactCC-style checks | Whether generated content is supported by the source | Must be validated for clinical use |
@@ -463,6 +498,7 @@ Reduce unsupported or contradictory claims **while preserving clinically importa
 
 ### Expected contributions
 
+- A reproducible report-image ingestion and OCR evaluation stage.
 - ClinicalT5-based summarization baseline.
 - Evidence-checking and correction workflow.
 - Evaluation of factuality/omission trade-offs.
@@ -471,6 +507,8 @@ Reduce unsupported or contradictory claims **while preserving clinically importa
 ### Limitations stated in the revised PPT
 
 - MIMIC notes reflect one institution and population.
+- OCR quality varies with image resolution, language, handwriting, layout, and document condition; OCR errors can propagate into summaries.
+- MIMIC-IV-Note is text-only and cannot establish image-OCR performance.
 - Reference summaries may not cover every useful fact.
 - Automatic factuality metrics can miss clinical nuance.
 - Human evaluation is limited and is not a safety certification.
@@ -486,6 +524,10 @@ This is a **research prototype**, not a clinical decision-making system. Generat
 The presentations propose the overall workflow but do not specify all implementation choices. This checklist translates the stated plan into decisions that need to be made; it is not a claim that the work has already been completed.
 
 - [ ] Complete the applicable MIMIC-IV / MIMIC-IV-Note access and data-use requirements.
+- [ ] Select an authorized report-image source and confirm image/transcription permissions; do not treat MIMIC-IV-Note as an image dataset.
+- [ ] Define accepted image/PDF formats, page limits, local storage, and deletion behavior for uploaded reports.
+- [ ] Compare OCR engines and document preprocessing on a small sample; preserve page/region provenance and uncertain text.
+- [ ] Define OCR review and evaluation for numbers, units, medication names, negation, dates, and tables.
 - [ ] Select the exact note table, note type, and inclusion/exclusion rules.
 - [ ] Confirm whether usable input/reference-summary pairs are available for the selected task.
 - [ ] Define patient/admission-grouped train, validation, and test splits.
@@ -512,6 +554,8 @@ The presentations propose the overall workflow but do not specify all implementa
 - **Intrinsic hallucination:** Alteration/contradiction of a source fact.
 - **Extrinsic hallucination:** Addition of a fact not established by the source.
 - **Evidence span:** A specific part of the source note used to justify a generated claim.
+- **OCR (optical character recognition):** Conversion of text rendered in a document image into machine-readable text; it does not interpret diagnostic imagery.
+- **OCR provenance:** References from extracted text to its source image, page, region, engine, and processing settings.
 - **Claim-level verification:** Checking individual clinical statements against source evidence.
 - **Negation preservation:** Maintaining distinctions such as “has” versus “does not have” or “denies.”
 - **Uncertainty preservation:** Maintaining the difference between a possible/suspected condition and a confirmed one.
@@ -543,4 +587,4 @@ The following records reflect the citation information shown in the revised PPT.
 
 ## 13. Quick summary
 
-The current proposal is a text-only clinical summarization system using MIMIC-IV-Note and ClinicalT5. Its distinguishing component is a post-generation verification process: split the draft into claims, connect claims to source evidence, check support and contradiction, preserve negation and uncertainty, and revise or remove unsupported claims before finalizing the summary. Evaluation combines lexical overlap (ROUGE), optional semantic similarity (BERTScore), factual-consistency methods (AlignScore or FactCC-style checks), and targeted manual error analysis. The original PDF includes OCR/CV and MIMIC-III/MIMIC-IV together; these were removed from the revised proposal's scope.
+The current workspace direction is a planned document-image OCR pipeline with a direct-text route, optional source-linked fact extraction, concise summaries, and evidence verification. Its distinguishing research focus is whether verification reduces unsupported or contradictory outputs while preserving important information. Evaluation separates OCR fidelity, structured field accuracy where labels exist, summary similarity where references exist, and claim-level factuality/manual review. The presentations describe earlier scopes; the revised PPT is text-only, while the current workspace restores OCR as a planned document-processing stage. No end-to-end feature is implemented yet.
