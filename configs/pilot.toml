@@ -1,0 +1,9 @@
+# All paths are relative to the repository root.
+dataset = "data/public_pilot/notes.csv"
+backend = "public_pilot"
+chunk_max_tokens = 128
+chunk_overlap = 24
+summary_sentences = 3
+
+# Optional local model checkpoint. Download this into models/biogpt/ yourself.
+# model_dir = "models/biogpt"

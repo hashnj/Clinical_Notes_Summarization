@@ -19,6 +19,14 @@ These paths are ignored by Git. Do not add real report images or note-level exam
 
 Follow the applicable source-specific credentialing, data-use, storage, and sharing requirements. MIMIC-IV-Note is machine-readable text; it does not provide report images for OCR evaluation. Select a separately authorized image source and confirm permission for local processing, OCR, and any derived transcriptions before use.
 
+The committed `data/public_pilot/notes.csv` is synthetic and exists only to
+exercise the pipeline before restricted PhysioNet access is available. It is
+not a substitute for MIMIC-IV-Note and must not be described as a public
+clinical dataset. The adapter contract is `note_id,text` with an optional
+`reference_summary` column. An authorized MIMIC-IV-Note export can be mapped to
+those columns and loaded with the `mimic_iv_note` backend without changing
+preprocessing or evaluation code.
+
 Treat images, OCR transcripts, corrected text, identifiers, evidence spans, and generated summaries as sensitive. OCR text remains sensitive even when it is derived from an image. Do not commit raw images, note-level data, OCR output, identifiers, local model files, notebook outputs containing clinical content, or generated predictions. Avoid external OCR or model APIs unless the applicable terms and consent explicitly permit sending the source content.
 
 Before processing data, record the source/resource version, image or note types, target pairing, inclusion rules, OCR/model versions, and split strategy in project documentation without including restricted content. Preserve source IDs and page/region references locally so extracted text and summary claims can be audited. Store only aggregate, non-identifying metrics in Git when the applicable rules allow it.

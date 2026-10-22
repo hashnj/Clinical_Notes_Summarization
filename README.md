@@ -2,7 +2,7 @@
 
 Research prototype for extracting text from medical report images, generating concise summaries, and evaluating whether source-evidence checks reduce unsupported claims without losing important information.
 
-**Status:** Local image upload, OCR, and editable text review are implemented as an early prototype. Summarization, structured extraction, and evidence verification are not implemented yet. This is not a clinical tool.
+**Status:** Local image upload/OCR review and a text summarization pilot are implemented. The pilot is synthetic and is not a clinical tool.
 
 ## Start Here
 
@@ -36,7 +36,51 @@ src/clinical_note_summarization/
    verification/                   Claim/evidence checks and policy
    evaluation/                     Metrics and review exports
 tests/                            Unit tests using synthetic examples
+results/                          Aggregate experiment outputs only
 ```
+
+### Text pilot pipeline
+
+```text
+public_pilot CSV -> common NoteRecord schema -> section splitter
+                                      -> placeholder normalization
+                                      -> overlapping token chunks
+                                      -> lead-k / TextRank extractive baseline
+                                      -> optional local BioGPT generation
+```
+
+The committed [synthetic pilot dataset](data/public_pilot/notes.csv) contains
+three discharge-style examples so the pipeline can be demonstrated while
+PhysioNet access is pending. It is not copied from MIMIC or another clinical
+dataset. After access is granted, use an authorized local export with the same
+`note_id,text` columns and the `mimic_iv_note` adapter. No adapter downloads or
+uploads data.
+
+Run the [pilot notebook](notebooks/01_pilot_baseline.ipynb) from the repository
+root after installing the development extra:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m jupyter notebook notebooks/01_pilot_baseline.ipynb
+```
+
+Keep notebook outputs empty before committing if they contain note-level text.
+
+### Optional local medical model
+
+The optional `models` extra supports a local BioGPT checkpoint. Download it into
+`models/biogpt/` in an approved, authenticated environment, then load it with
+`LocalMedicalGenerator`. Inference uses `local_files_only=True`; note text is
+passed only to the local process and never to a hosted API. Model weights remain
+ignored by Git.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[models]"
+.\.venv\Scripts\python.exe -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='microsoft/biogpt', local_dir='models/biogpt')"
+```
+
+Check the model license, provenance, context length, and data-use constraints
+before downloading or using it. Generated text still requires evidence checks.
 
 ## Planned Processing Flow
 
@@ -63,7 +107,7 @@ The base install has no model or dataset dependencies. To run the local OCR revi
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-\.venv\Scripts\python.exe -m pip install -e ".[app,dev]"
+.\.venv\Scripts\python.exe -m pip install -e ".[app,dev]"
 .\.venv\Scripts\python.exe -m pytest
 \.venv\Scripts\python.exe -m streamlit run scripts/ocr_app.py
 ```
@@ -83,7 +127,7 @@ To inspect authorized CSV data and use notebooks, install the data-analysis tool
 Install these only after confirming dataset access, the model checkpoint, and available hardware. Install PyTorch using the command for your platform and CPU/CUDA configuration from the [official PyTorch selector](https://pytorch.org/get-started/locally/), then install the model libraries:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install transformers sentencepiece accelerate
+.\.venv\Scripts\python.exe -m pip install -e ".[models]"
 ```
 
 For an initial TF-IDF evidence retriever and ROUGE evaluation:

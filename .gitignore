@@ -19,6 +19,7 @@ dist/
 /data/interim/
 /data/external/
 /outputs/
+/results/
 /models/
 /checkpoints/
 *.safetensors
